@@ -1,0 +1,1711 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#ffffff">
+<title>FinTrack</title>
+
+<!-- ── FIREBASE SDK ── -->
+<script type="module">
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+  import {
+    getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+    signOut, onAuthStateChanged, updateProfile, sendPasswordResetEmail
+  } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+  import {
+    getFirestore, doc, getDoc, setDoc, updateDoc
+  } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+  // ── CONFIGURACIÓN FIREBASE ──
+  // 👇 Reemplaza estos valores con los de tu proyecto en Firebase Console
+  const firebaseConfig = {
+    apiKey: "AIzaSyDfwx1etFBEScVjE4oJTFPNVGmCJIXpPjY",
+    authDomain: "fintrack-app-e801b.firebaseapp.com",
+    projectId: "fintrack-app-e801b",
+    storageBucket: "fintrack-app-e801b.firebasestorage.app",
+    messagingSenderId: "965147301566",
+    appId: "1:965147301566:web:bda15f2eb3cc3641d4b0ef"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+
+  // Exponer globalmente para el resto del script
+  window._auth = auth;
+  window._db = db;
+  window._fbAuth = { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, sendPasswordResetEmail };
+  window._fbDB = { doc, getDoc, setDoc, updateDoc };
+  window._firebaseReady = true;
+
+  // Escuchar cambios de sesión
+  onAuthStateChanged(auth, async (user) => {
+    if (user) {
+      window._currentUID = user.uid;
+      window._currentUser = { uid: user.uid, name: user.displayName || user.email.split('@')[0], email: user.email };
+      await window.launchApp();
+    } else {
+      window._currentUID = null;
+      window._currentUser = null;
+      document.getElementById('screen-auth').style.display = 'flex';
+      document.getElementById('screen-auth').classList.add('active');
+      const appEl = document.getElementById('app');
+      if (appEl) appEl.style.display = 'none';
+    }
+  });
+</script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f7f6f2;
+    --surface: #ffffff;
+    --surface2: #f0ede6;
+    --border: #e8e4dc;
+    --text: #1a1814;
+    --text2: #7a7670;
+    --text3: #b0ac a5;
+    --accent: #1a1814;
+    --green: #2d7a4f;
+    --green-bg: #eaf4ee;
+    --red: #c0392b;
+    --red-bg: #fdf0ee;
+    --yellow: #c97d20;
+    --yellow-bg: #fdf4e7;
+    --radius: 20px;
+    --radius-sm: 12px;
+    --shadow: 0 2px 20px rgba(0,0,0,0.06);
+    --shadow-lg: 0 8px 40px rgba(0,0,0,0.12);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    max-width: 430px;
+    margin: 0 auto;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, .syne { font-family: 'Syne', sans-serif; }
+
+  /* ── SCREEN SYSTEM ── */
+  .screen { display: none; min-height: 100vh; padding-bottom: 90px; }
+  .screen.active { display: block; }
+
+  /* ── AUTH ── */
+  #screen-auth {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 48px 32px;
+    min-height: 100vh;
+    background: var(--surface);
+  }
+  #screen-auth.active { display: flex; }
+
+  .auth-logo {
+    font-family: 'Syne', sans-serif;
+    font-size: 42px;
+    font-weight: 800;
+    letter-spacing: -2px;
+    margin-bottom: 8px;
+  }
+  .auth-logo span { color: var(--green); }
+
+  .auth-tagline {
+    color: var(--text2);
+    font-size: 14px;
+    margin-bottom: 52px;
+    text-align: center;
+    font-style: italic;
+  }
+
+  .auth-tabs {
+    display: flex;
+    background: var(--bg);
+    border-radius: 14px;
+    padding: 4px;
+    width: 100%;
+    margin-bottom: 28px;
+  }
+  .auth-tab {
+    flex: 1;
+    padding: 10px;
+    text-align: center;
+    font-family: 'Syne', sans-serif;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    border-radius: 10px;
+    transition: all .2s;
+    color: var(--text2);
+  }
+  .auth-tab.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+
+  .auth-form { width: 100%; display: flex; flex-direction: column; gap: 14px; }
+  .auth-form.hidden { display: none; }
+
+  .input-group { display: flex; flex-direction: column; gap: 6px; }
+  .input-group label { font-size: 12px; font-weight: 500; color: var(--text2); letter-spacing: .5px; text-transform: uppercase; }
+  .input-group input {
+    background: var(--bg);
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 14px 16px;
+    font-size: 15px;
+    font-family: 'DM Sans', sans-serif;
+    color: var(--text);
+    outline: none;
+    transition: border-color .2s;
+  }
+  .input-group input:focus { border-color: var(--accent); }
+
+  .btn-primary {
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 16px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 15px;
+    cursor: pointer;
+    width: 100%;
+    margin-top: 8px;
+    transition: transform .15s, opacity .15s;
+    letter-spacing: .3px;
+  }
+  .btn-primary:active { transform: scale(.97); opacity: .9; }
+
+  .auth-error {
+    color: var(--red);
+    font-size: 13px;
+    text-align: center;
+    min-height: 18px;
+  }
+
+  /* ── TOP BAR ── */
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: rgba(247,246,242,0.92);
+    backdrop-filter: blur(12px);
+    padding: 16px 20px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .topbar-logo { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 22px; letter-spacing: -1px; }
+  .topbar-logo span { color: var(--green); }
+  .topbar-user {
+    width: 36px; height: 36px;
+    background: var(--accent);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: white;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+  }
+
+  /* ── BOTTOM NAV ── */
+  .bottom-nav {
+    position: fixed;
+    bottom: 0; left: 50%;
+    transform: translateX(-50%);
+    width: 100%; max-width: 430px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    display: flex;
+    padding: 8px 0 20px;
+    z-index: 100;
+  }
+  .nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 0;
+    cursor: pointer;
+    color: var(--text2);
+    transition: color .2s;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: .3px;
+  }
+  .nav-item.active { color: var(--accent); }
+  .nav-item svg { width: 22px; height: 22px; }
+  .nav-item.add-btn {
+    flex: 0 0 64px;
+  }
+  .nav-add-circle {
+    width: 52px; height: 52px;
+    background: var(--accent);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    margin-top: -20px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+    transition: transform .15s;
+  }
+  .nav-add-circle:active { transform: scale(.93); }
+  .nav-add-circle svg { width: 26px; height: 26px; color: white; }
+
+  /* ── DASHBOARD ── */
+  .dashboard-header {
+    padding: 8px 20px 24px;
+  }
+  .greeting {
+    font-size: 13px;
+    color: var(--text2);
+    margin-bottom: 2px;
+  }
+  .greeting-name {
+    font-family: 'Syne', sans-serif;
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -.5px;
+  }
+
+  .balance-card {
+    margin: 0 20px 20px;
+    background: var(--accent);
+    border-radius: 24px;
+    padding: 28px 24px;
+    color: white;
+    position: relative;
+    overflow: hidden;
+  }
+  .balance-card::before {
+    content: '';
+    position: absolute;
+    top: -40px; right: -40px;
+    width: 160px; height: 160px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 50%;
+  }
+  .balance-card::after {
+    content: '';
+    position: absolute;
+    bottom: -60px; left: 20px;
+    width: 200px; height: 200px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 50%;
+  }
+  .balance-label { font-size: 12px; opacity: .65; letter-spacing: .8px; text-transform: uppercase; margin-bottom: 6px; }
+  .balance-amount {
+    font-family: 'Syne', sans-serif;
+    font-size: 36px;
+    font-weight: 800;
+    letter-spacing: -1.5px;
+    margin-bottom: 24px;
+  }
+  .balance-row {
+    display: flex;
+    gap: 16px;
+  }
+  .balance-stat {
+    flex: 1;
+    background: rgba(255,255,255,0.1);
+    border-radius: 14px;
+    padding: 12px 14px;
+  }
+  .balance-stat-label { font-size: 11px; opacity: .7; margin-bottom: 4px; letter-spacing: .3px; }
+  .balance-stat-val { font-family: 'Syne', sans-serif; font-size: 17px; font-weight: 700; }
+  .balance-stat-val.inc { color: #7dd3a8; }
+  .balance-stat-val.exp { color: #f9a8a0; }
+
+  /* ACCOUNTS */
+  .section-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 16px;
+    font-weight: 700;
+    padding: 0 20px;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .section-link { font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 400; color: var(--text2); }
+
+  .accounts-scroll {
+    display: flex;
+    gap: 12px;
+    padding: 0 20px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin-bottom: 28px;
+  }
+  .accounts-scroll::-webkit-scrollbar { display: none; }
+
+  .account-chip {
+    flex: 0 0 auto;
+    background: var(--surface);
+    border-radius: 18px;
+    padding: 16px 20px;
+    min-width: 140px;
+    box-shadow: var(--shadow);
+    border: 1.5px solid var(--border);
+    cursor: pointer;
+    transition: transform .15s, box-shadow .15s;
+  }
+  .account-chip:active { transform: scale(.97); }
+  .account-chip.add-account {
+    display: flex; align-items: center; justify-content: center;
+    gap: 8px;
+    color: var(--text2);
+    border-style: dashed;
+    background: transparent;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .account-chip .edit-badge {
+    display: none;
+    position: absolute;
+    top: 8px; right: 8px;
+    background: var(--accent);
+    color: white;
+    border-radius: 6px;
+    font-size: 10px;
+    padding: 2px 6px;
+    font-weight: 600;
+  }
+  .account-chip { position: relative; }
+  .account-chip:active .edit-badge { display: block; }
+  .account-icon {
+    width: 32px; height: 32px;
+    background: var(--surface2);
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    margin-bottom: 10px;
+  }
+  .account-name { font-size: 12px; color: var(--text2); margin-bottom: 3px; }
+  .account-bal { font-family: 'Syne', sans-serif; font-size: 17px; font-weight: 700; letter-spacing: -.5px; }
+
+  /* CHART */
+  .chart-card {
+    margin: 0 20px 28px;
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 20px;
+    box-shadow: var(--shadow);
+  }
+  .chart-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+  .chart-tab {
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all .2s;
+    color: var(--text2);
+    border: 1.5px solid transparent;
+  }
+  .chart-tab.active { background: var(--accent); color: white; }
+  canvas#mainChart { width: 100% !important; }
+
+  /* CATEGORIES */
+  .cats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    padding: 0 20px;
+    margin-bottom: 28px;
+  }
+  .cat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    transition: transform .15s;
+  }
+  .cat-item:active { transform: scale(.93); }
+  .cat-icon {
+    width: 54px; height: 54px;
+    border-radius: 16px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+  }
+  .cat-name { font-size: 10px; color: var(--text2); text-align: center; font-weight: 500; }
+
+  /* RECENT */
+  .tx-list { padding: 0 20px; display: flex; flex-direction: column; gap: 8px; }
+  .tx-item {
+    background: var(--surface);
+    border-radius: var(--radius-sm);
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    box-shadow: var(--shadow);
+    animation: fadeIn .3s ease;
+  }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .tx-icon {
+    width: 42px; height: 42px;
+    border-radius: 13px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .tx-info { flex: 1; min-width: 0; }
+  .tx-name { font-weight: 500; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tx-meta { font-size: 12px; color: var(--text2); margin-top: 2px; }
+  .tx-amount { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 15px; flex-shrink: 0; }
+  .tx-amount.inc { color: var(--green); }
+  .tx-amount.exp { color: var(--red); }
+
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text2);
+  }
+  .empty-state .emoji { font-size: 40px; margin-bottom: 12px; }
+  .empty-state p { font-size: 14px; }
+
+  /* ── HISTORY SCREEN ── */
+  .history-filters {
+    display: flex;
+    gap: 8px;
+    padding: 12px 20px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .filter-pill {
+    flex: 0 0 auto;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1.5px solid var(--border);
+    background: var(--surface);
+    color: var(--text2);
+    transition: all .2s;
+    white-space: nowrap;
+  }
+  .filter-pill.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+  /* ── STATS SCREEN ── */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    padding: 0 20px 20px;
+  }
+  .stat-card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 18px;
+    box-shadow: var(--shadow);
+  }
+  .stat-card.full { grid-column: 1 / -1; }
+  .stat-card-label { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 8px; }
+  .stat-card-val { font-family: 'Syne', sans-serif; font-size: 24px; font-weight: 800; letter-spacing: -1px; }
+  .stat-card-sub { font-size: 12px; color: var(--text2); margin-top: 4px; }
+
+  .donut-wrap { display: flex; align-items: center; gap: 20px; }
+  .donut-legend { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+
+  /* ── ADD TRANSACTION MODAL ── */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.4);
+    z-index: 200;
+    backdrop-filter: blur(4px);
+    align-items: flex-end;
+  }
+  .modal-overlay.open { display: flex; }
+
+  .modal {
+    background: var(--surface);
+    border-radius: 28px 28px 0 0;
+    padding: 24px 24px 40px;
+    width: 100%;
+    max-width: 430px;
+    margin: 0 auto;
+    animation: slideUp .3s cubic-bezier(.34,1.56,.64,1);
+  }
+  @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
+  .modal-handle {
+    width: 40px; height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    margin: 0 auto 20px;
+  }
+
+  .modal-title { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 700; margin-bottom: 20px; }
+
+  .type-toggle {
+    display: flex;
+    background: var(--bg);
+    border-radius: var(--radius-sm);
+    padding: 4px;
+    margin-bottom: 20px;
+  }
+  .type-btn {
+    flex: 1;
+    padding: 10px;
+    text-align: center;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: 'Syne', sans-serif;
+    font-weight: 600;
+    font-size: 14px;
+    transition: all .2s;
+    color: var(--text2);
+  }
+  .type-btn.active-inc { background: var(--green-bg); color: var(--green); }
+  .type-btn.active-exp { background: var(--red-bg); color: var(--red); }
+
+  .amount-input-wrap {
+    text-align: center;
+    margin-bottom: 24px;
+    padding: 20px;
+    background: var(--bg);
+    border-radius: var(--radius);
+  }
+  .amount-prefix { font-size: 20px; color: var(--text2); vertical-align: super; }
+  .amount-input {
+    font-family: 'Syne', sans-serif;
+    font-size: 44px;
+    font-weight: 800;
+    letter-spacing: -2px;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: var(--text);
+    width: 100%;
+    text-align: center;
+  }
+  .amount-input::placeholder { color: var(--border); }
+
+  .cats-scroll {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin-bottom: 20px;
+    padding-bottom: 4px;
+  }
+  .cats-scroll::-webkit-scrollbar { display: none; }
+  .cat-pill {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+  }
+  .cat-pill-icon {
+    width: 48px; height: 48px;
+    border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    border: 2px solid transparent;
+    background: var(--bg);
+    transition: all .2s;
+  }
+  .cat-pill.selected .cat-pill-icon { border-color: var(--accent); background: var(--surface2); }
+  .cat-pill-name { font-size: 10px; color: var(--text2); font-weight: 500; }
+
+  .form-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+  .form-label { font-size: 11px; font-weight: 500; color: var(--text2); letter-spacing: .5px; text-transform: uppercase; }
+  .form-input {
+    background: var(--bg);
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 13px 16px;
+    font-size: 15px;
+    font-family: 'DM Sans', sans-serif;
+    color: var(--text);
+    outline: none;
+    transition: border-color .2s;
+    width: 100%;
+  }
+  .form-input:focus { border-color: var(--accent); }
+
+  .account-select-wrap {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin-bottom: 20px;
+  }
+  .account-select-wrap::-webkit-scrollbar { display: none; }
+  .acc-pill {
+    flex: 0 0 auto;
+    padding: 8px 16px;
+    border-radius: 20px;
+    border: 1.5px solid var(--border);
+    background: var(--bg);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all .2s;
+    white-space: nowrap;
+  }
+  .acc-pill.selected { background: var(--accent); color: white; border-color: var(--accent); }
+
+  /* ADD ACCOUNT MODAL */
+  .modal2 {
+    background: var(--surface);
+    border-radius: 28px 28px 0 0;
+    padding: 24px 24px 40px;
+    width: 100%;
+    max-width: 430px;
+    margin: 0 auto;
+    animation: slideUp .3s cubic-bezier(.34,1.56,.64,1);
+  }
+
+  /* NOTIFICATION TOAST */
+  .toast {
+    position: fixed;
+    bottom: 100px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--accent);
+    color: white;
+    padding: 12px 24px;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: 500;
+    opacity: 0;
+    transition: all .3s;
+    z-index: 300;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* SCROLL PADDING */
+  .pb-nav { padding-bottom: 100px; }
+</style>
+</head>
+<body>
+
+<!-- AUTH SCREEN -->
+<div id="screen-auth" class="screen active">
+  <div class="auth-logo">Fin<span>Track</span></div>
+  <div class="auth-tagline">Tu dinero, claro y al instante.</div>
+  <div class="auth-tabs">
+    <div class="auth-tab active" onclick="switchAuthTab('login')">Entrar</div>
+    <div class="auth-tab" onclick="switchAuthTab('register')">Registrarse</div>
+  </div>
+  <form id="form-login" class="auth-form" onsubmit="handleLogin(event)">
+    <div class="input-group">
+      <label>Correo</label>
+      <input type="email" id="login-email" placeholder="tu@correo.com" required>
+    </div>
+    <div class="input-group">
+      <label>Contraseña</label>
+      <input type="password" id="login-pass" placeholder="••••••••" required>
+    </div>
+    <div class="auth-error" id="login-error"></div>
+    <button type="submit" class="btn-primary">Entrar →</button>
+    <div style="text-align:center;margin-top:14px">
+      <span onclick="openForgotPassword()" style="font-size:13px;color:var(--text2);cursor:pointer;text-decoration:underline;text-underline-offset:3px">¿Olvidaste tu contraseña?</span>
+    </div>
+  </form>
+
+  <!-- FORGOT PASSWORD MODAL -->
+  <div id="modal-forgot" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:999;align-items:center;justify-content:center;padding:24px">
+    <div style="background:var(--surface);border-radius:var(--radius);padding:28px;width:100%;max-width:380px;box-shadow:var(--shadow-lg)">
+      <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:700;margin-bottom:8px">Recuperar contraseña</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:20px">Te enviaremos un correo para restablecer tu contraseña.</div>
+      <div class="input-group">
+        <label>Correo</label>
+        <input type="email" id="forgot-email" placeholder="tu@correo.com">
+      </div>
+      <div id="forgot-msg" style="font-size:13px;margin:8px 0;min-height:18px"></div>
+      <button class="btn-primary" onclick="sendResetEmail()">Enviar correo →</button>
+      <button onclick="closeForgotPassword()" style="margin-top:10px;width:100%;background:none;border:none;color:var(--text2);font-size:14px;cursor:pointer;padding:8px;">Cancelar</button>
+    </div>
+  </div>
+  <form id="form-register" class="auth-form hidden" onsubmit="handleRegister(event)">
+    <div class="input-group">
+      <label>Nombre</label>
+      <input type="text" id="reg-name" placeholder="¿Cómo te llamas?" required>
+    </div>
+    <div class="input-group">
+      <label>Correo</label>
+      <input type="email" id="reg-email" placeholder="tu@correo.com" required>
+    </div>
+    <div class="input-group">
+      <label>Contraseña</label>
+      <input type="password" id="reg-pass" placeholder="Mínimo 6 caracteres" minlength="6" required>
+    </div>
+    <div class="auth-error" id="reg-error"></div>
+    <button type="submit" class="btn-primary">Crear cuenta →</button>
+  </form>
+</div>
+
+<!-- MAIN APP -->
+<div id="app" style="display:none">
+
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div class="topbar-logo">Fin<span>Track</span></div>
+    <div class="topbar-user" id="user-avatar" onclick="logout()">?</div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="screen-dashboard" class="screen active">
+    <div class="dashboard-header">
+      <div class="greeting">Buenos días,</div>
+      <div class="greeting-name syne" id="greeting-name">—</div>
+    </div>
+
+    <!-- BALANCE CARD -->
+    <div class="balance-card">
+      <div class="balance-label">Saldo Total</div>
+      <div class="balance-amount" id="total-balance">$ 0</div>
+      <div class="balance-row">
+        <div class="balance-stat">
+          <div class="balance-stat-label">↑ Ingresos</div>
+          <div class="balance-stat-val inc" id="total-income">$ 0</div>
+        </div>
+        <div class="balance-stat">
+          <div class="balance-stat-label">↓ Gastos</div>
+          <div class="balance-stat-val exp" id="total-expenses">$ 0</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ACCOUNTS -->
+    <div class="section-title">
+      Cuentas
+      <span class="section-link" onclick="openAddAccount()">+ Agregar</span>
+    </div>
+    <div class="accounts-scroll" id="accounts-list"></div>
+
+    <!-- CHART -->
+    <div class="chart-card">
+      <div class="chart-tabs">
+        <div class="chart-tab active" onclick="setChartPeriod('week',this)">Semana</div>
+        <div class="chart-tab" onclick="setChartPeriod('month',this)">Mes</div>
+      </div>
+      <canvas id="mainChart" height="160"></canvas>
+    </div>
+
+    <!-- CATEGORIES -->
+    <div class="section-title" style="margin-bottom:16px">Categorías</div>
+    <div class="cats-grid" id="cats-grid"></div>
+
+    <!-- RECENT TX -->
+    <div class="section-title">
+      Recientes
+      <span class="section-link" onclick="showScreen('history')">Ver todo</span>
+    </div>
+    <div class="tx-list pb-nav" id="recent-list"></div>
+  </div>
+
+  <!-- HISTORY SCREEN -->
+  <div id="screen-history" class="screen">
+    <div style="display:flex;align-items:center;gap:12px;padding:16px 20px 0">
+      <div onclick="showScreen('dashboard')" style="cursor:pointer;font-size:22px;line-height:1">←</div>
+      <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:700;letter-spacing:-.5px;">Movimientos</div>
+    </div>
+    <div class="history-filters" id="history-filters">
+      <div class="filter-pill active" onclick="filterHistory('all',this)">Todos</div>
+      <div class="filter-pill" onclick="filterHistory('Ingreso',this)">Ingresos</div>
+      <div class="filter-pill" onclick="filterHistory('Gasto',this)">Gastos</div>
+    </div>
+    <div class="tx-list pb-nav" id="history-list"></div>
+  </div>
+
+  <!-- STATS SCREEN -->
+  <div id="screen-stats" class="screen">
+    <div style="display:flex;align-items:center;gap:12px;padding:16px 20px 16px">
+      <div onclick="showScreen('dashboard')" style="cursor:pointer;font-size:22px;line-height:1">←</div>
+      <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:700;letter-spacing:-.5px;">Estadísticas</div>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-card-label">Ingresos mes</div>
+        <div class="stat-card-val inc" id="stat-month-inc">$ 0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-label">Gastos mes</div>
+        <div class="stat-card-val exp" id="stat-month-exp">$ 0</div>
+      </div>
+      <div class="stat-card full">
+        <div class="stat-card-label">Balance del mes</div>
+        <div class="stat-card-val" id="stat-month-bal">$ 0</div>
+        <div class="stat-card-sub" id="stat-month-sub"></div>
+      </div>
+      <div class="stat-card full" id="donuts-container">
+        <!-- filled dynamically per account -->
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM NAV -->
+  <div class="bottom-nav">
+    <div class="nav-item active" onclick="showScreen('dashboard')" id="nav-dashboard">
+      <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      Inicio
+    </div>
+    <div class="nav-item" onclick="showScreen('history')" id="nav-history">
+      <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      Historial
+    </div>
+    <div class="nav-item add-btn" onclick="openAddTx()">
+      <div class="nav-add-circle">
+        <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </div>
+    </div>
+    <div class="nav-item" onclick="showScreen('stats')" id="nav-stats">
+      <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      Stats
+    </div>
+    <div class="nav-item" onclick="logout()" id="nav-profile">
+      <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      Salir
+    </div>
+  </div>
+</div>
+
+<!-- ADD TRANSACTION MODAL -->
+<div class="modal-overlay" id="modal-tx" onclick="closeModalTx(event)">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <div class="modal-title" style="margin:0">Nuevo movimiento</div>
+      <div onclick="closeTxModal()" style="width:32px;height:32px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;color:var(--text2);flex-shrink:0">✕</div>
+    </div>
+    <div class="type-toggle">
+      <div class="type-btn active-exp" id="type-gasto" onclick="setType('Gasto')">↓ Gasto</div>
+      <div class="type-btn" id="type-ingreso" onclick="setType('Ingreso')">↑ Ingreso</div>
+    </div>
+    <div class="amount-input-wrap">
+      <span class="amount-prefix">$</span>
+      <input class="amount-input" id="tx-amount-display" type="text" placeholder="0" inputmode="numeric" oninput="formatAmountInput(this)">
+      <input type="hidden" id="tx-amount">
+    </div>
+    <div class="form-row">
+      <div class="form-label">Descripción</div>
+      <input class="form-input" id="tx-desc" placeholder="Ej: Mercado, Transporte, Venta...">
+    </div>
+    <div class="form-label" style="margin-bottom:10px">Categoría</div>
+    <div class="cats-scroll" id="modal-cats"></div>
+    <div class="form-label" style="margin-bottom:10px">Cuenta</div>
+    <div class="account-select-wrap" id="modal-accounts"></div>
+    <button class="btn-primary" onclick="saveTx()">Registrar →</button>
+  </div>
+</div>
+
+<!-- ADD ACCOUNT MODAL -->
+<div class="modal-overlay" id="modal-account" onclick="closeModalAcc(event)">
+  <div class="modal2">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Nueva cuenta</div>
+    <div class="form-row">
+      <div class="form-label">Nombre</div>
+      <input class="form-input" id="acc-name" placeholder="Ej: Bancolombia, Nequi, Efectivo...">
+    </div>
+    <div class="form-row">
+      <div class="form-label">Saldo inicial (COP)</div>
+      <input class="form-input" id="acc-balance" type="number" placeholder="0" inputmode="decimal">
+    </div>
+    <div class="form-row">
+      <div class="form-label">Ícono</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px">
+        <span class="acc-icon-opt" onclick="selectAccIcon(this,'🏦')" style="font-size:26px;cursor:pointer;padding:6px;border-radius:8px;border:2px solid var(--border)">🏦</span>
+        <span class="acc-icon-opt" onclick="selectAccIcon(this,'💵')" style="font-size:26px;cursor:pointer;padding:6px;border-radius:8px;border:2px solid transparent">💵</span>
+        <span class="acc-icon-opt" onclick="selectAccIcon(this,'💳')" style="font-size:26px;cursor:pointer;padding:6px;border-radius:8px;border:2px solid transparent">💳</span>
+        <span class="acc-icon-opt" onclick="selectAccIcon(this,'📱')" style="font-size:26px;cursor:pointer;padding:6px;border-radius:8px;border:2px solid transparent">📱</span>
+        <span class="acc-icon-opt" onclick="selectAccIcon(this,'🐷')" style="font-size:26px;cursor:pointer;padding:6px;border-radius:8px;border:2px solid transparent">🐷</span>
+      </div>
+    </div>
+    <button class="btn-primary" style="margin-top:8px" onclick="saveAccount()">Agregar cuenta →</button>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+// ── DATA LAYER (Firebase Firestore) ──
+
+function getCurrentUser() {
+  return window._currentUser || null;
+}
+
+async function getUserData() {
+  const uid = window._currentUID;
+  if (!uid) return { accounts: [], transactions: [] };
+  const ref = window._fbDB.doc(window._db, 'users', uid);
+  const snap = await window._fbDB.getDoc(ref);
+  if (snap.exists()) {
+    return snap.data();
+  }
+  // First time: create default data
+  const defaultData = {
+    accounts: [{ id: 'acc1', name: 'Efectivo', icon: '💵', balance: 0 }],
+    transactions: [],
+    categories: []
+  };
+  await window._fbDB.setDoc(ref, defaultData);
+  return defaultData;
+}
+
+async function saveUserData(data) {
+  const uid = window._currentUID;
+  if (!uid) return;
+  const ref = window._fbDB.doc(window._db, 'users', uid);
+  await window._fbDB.setDoc(ref, data, { merge: true });
+}
+
+// Cache local para evitar reads repetidos en la misma sesión
+let _dataCache = null;
+let _dataDirty = true;
+
+async function getCachedData() {
+  if (_dataDirty || !_dataCache) {
+    _dataCache = await getUserData();
+    _dataDirty = false;
+  }
+  return _dataCache;
+}
+
+async function saveCachedData(data) {
+  _dataCache = data;
+  await saveUserData(data);
+}
+
+// ── CATEGORIES ──
+const DEFAULT_CATEGORIES = [
+  { name: 'Mercado', icon: '🛒', color: '#FFF3E0' },
+  { name: 'Transporte', icon: '🚌', color: '#E3F2FD' },
+  { name: 'Restaurante', icon: '🍽️', color: '#FCE4EC' },
+  { name: 'Salud', icon: '💊', color: '#F3E5F5' },
+  { name: 'Servicios', icon: '💡', color: '#FFFDE7' },
+  { name: 'Arriendo', icon: '🏠', color: '#E8F5E9' },
+  { name: 'Educación', icon: '📚', color: '#E0F7FA' },
+  { name: 'Ropa', icon: '👕', color: '#FFF8E1' },
+  { name: 'Ocio', icon: '🎮', color: '#EDE7F6' },
+  { name: 'Inversión', icon: '📈', color: '#E8F5E9' },
+  { name: 'Ventas', icon: '💰', color: '#E8F5E9' },
+  { name: 'Otros', icon: '📦', color: '#F5F5F5' },
+];
+let CATEGORIES = [...DEFAULT_CATEGORIES];
+
+async function loadCategories() {
+  if (!window._currentUID) return;
+  const data = await getCachedData();
+  const custom = data?.categories || [];
+  CATEGORIES = [...DEFAULT_CATEGORIES, ...custom];
+}
+async function saveCustomCategory(cat) {
+  const data = await getCachedData();
+  if (!data.categories) data.categories = [];
+  data.categories.push(cat);
+  await saveCachedData(data);
+  await loadCategories();
+}
+
+const CAT_COLORS = ['#2d7a4f','#c97d20','#c0392b','#2980b9','#8e44ad','#16a085','#d35400','#27ae60','#2c3e50','#e74c3c','#f39c12','#7f8c8d'];
+
+// ── AUTH ──
+let currentType = 'Gasto';
+let selectedCat = null;
+let selectedAcc = null;
+let selectedAccIcon = '🏦';
+let chartInstance = null;
+let donutInstance = null; // legacy, replaced by _donutInstances array
+let historyFilter = 'all';
+
+function switchAuthTab(tab) {
+  document.querySelectorAll('.auth-tab').forEach((t,i) => t.classList.toggle('active', (i===0 && tab==='login') || (i===1 && tab==='register')));
+  document.getElementById('form-login').classList.toggle('hidden', tab !== 'login');
+  document.getElementById('form-register').classList.toggle('hidden', tab !== 'register');
+}
+
+async function handleRegister(e) {
+  e.preventDefault();
+  const name = document.getElementById('reg-name').value.trim();
+  const email = document.getElementById('reg-email').value.trim().toLowerCase();
+  const pass = document.getElementById('reg-pass').value;
+  const errEl = document.getElementById('reg-error');
+  errEl.textContent = '';
+  try {
+    const cred = await window._fbAuth.createUserWithEmailAndPassword(window._auth, email, pass);
+    await window._fbAuth.updateProfile(cred.user, { displayName: name });
+    window._currentUser = { uid: cred.user.uid, name, email };
+    // onAuthStateChanged se encarga de llamar launchApp()
+  } catch(err) {
+    const msgs = {
+      'auth/email-already-in-use': 'Este correo ya está registrado.',
+      'auth/weak-password': 'La contraseña debe tener al menos 6 caracteres.',
+      'auth/invalid-email': 'Correo inválido.'
+    };
+    errEl.textContent = msgs[err.code] || 'Error al registrarse.';
+  }
+}
+
+async function handleLogin(e) {
+  e.preventDefault();
+  const email = document.getElementById('login-email').value.trim().toLowerCase();
+  const pass = document.getElementById('login-pass').value;
+  const errEl = document.getElementById('login-error');
+  errEl.textContent = '';
+  try {
+    await window._fbAuth.signInWithEmailAndPassword(window._auth, email, pass);
+    // onAuthStateChanged se encarga de llamar launchApp()
+  } catch(err) {
+    errEl.textContent = 'Correo o contraseña incorrectos.';
+  }
+}
+
+window.launchApp = async function() {
+  document.getElementById('screen-auth').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  _dataDirty = true; // forzar reload desde Firestore
+  await loadCategories();
+  const user = getCurrentUser();
+  document.getElementById('greeting-name').textContent = user?.name?.split(' ')[0] || 'Usuario';
+  document.getElementById('user-avatar').textContent = (user?.name?.[0] || '?').toUpperCase();
+  await renderDashboard();
+}
+
+async function logout() {
+  _dataCache = null;
+  _dataDirty = true;
+  await window._fbAuth.signOut(window._auth);
+  // onAuthStateChanged muestra la pantalla de auth automáticamente
+}
+
+// ── FORGOT PASSWORD ──
+function openForgotPassword() {
+  const email = document.getElementById('login-email').value;
+  document.getElementById('forgot-email').value = email;
+  document.getElementById('forgot-msg').textContent = '';
+  document.getElementById('forgot-msg').style.color = 'var(--text2)';
+  document.getElementById('modal-forgot').style.display = 'flex';
+}
+function closeForgotPassword() {
+  document.getElementById('modal-forgot').style.display = 'none';
+}
+async function sendResetEmail() {
+  const email = document.getElementById('forgot-email').value.trim();
+  const msgEl = document.getElementById('forgot-msg');
+  if (!email) { msgEl.textContent = 'Ingresa tu correo.'; msgEl.style.color = 'var(--red)'; return; }
+  try {
+    await window._fbAuth.sendPasswordResetEmail(window._auth, email);
+    msgEl.textContent = '✅ Correo enviado — revisa tu bandeja.';
+    msgEl.style.color = 'var(--green)';
+    setTimeout(() => closeForgotPassword(), 3000);
+  } catch(err) {
+    msgEl.textContent = 'No encontramos ese correo.';
+    msgEl.style.color = 'var(--red)';
+  }
+}
+
+// ── NAVIGATION ──
+async function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + name).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  const nav = document.getElementById('nav-' + name);
+  if (nav) nav.classList.add('active');
+  if (name === 'stats') await renderStats();
+  if (name === 'history') await renderHistory();
+  if (name === 'dashboard') await renderDashboard();
+}
+
+// ── RENDER DASHBOARD ──
+async function renderDashboard() {
+  const data = await getCachedData();
+  const txs = data.transactions || [];
+
+  // totals
+  let inc = 0, exp = 0;
+  txs.forEach(tx => { if(tx.type==='Ingreso') inc += tx.amount; else exp += tx.amount; });
+
+  const totalBalance = data.accounts.reduce((s,a) => {
+    const accInc = txs.filter(t => t.accountId===a.id && t.type==='Ingreso').reduce((s,t)=>s+t.amount,0);
+    const accExp = txs.filter(t => t.accountId===a.id && t.type==='Gasto').reduce((s,t)=>s+t.amount,0);
+    return s + a.balance + accInc - accExp;
+  }, 0);
+
+  document.getElementById('total-balance').textContent = fmt(totalBalance);
+  document.getElementById('total-income').textContent = fmt(inc);
+  document.getElementById('total-expenses').textContent = fmt(exp);
+
+  // accounts
+  const al = document.getElementById('accounts-list');
+  al.innerHTML = '';
+  data.accounts.forEach(acc => {
+    const accInc = txs.filter(t => t.accountId===acc.id && t.type==='Ingreso').reduce((s,t)=>s+t.amount,0);
+    const accExp = txs.filter(t => t.accountId===acc.id && t.type==='Gasto').reduce((s,t)=>s+t.amount,0);
+    const bal = acc.balance + accInc - accExp;
+    const chip = document.createElement('div');
+    chip.className = 'account-chip';
+    chip.style.cursor = 'pointer';
+    chip.innerHTML = '<div style="position:absolute;top:8px;right:8px;opacity:0.3;font-size:11px">✏️</div><div class="account-icon">' + acc.icon + '</div><div class="account-name">' + acc.name + '</div><div class="account-bal">' + fmt(bal) + '</div>';
+    chip.onclick = () => openEditAccount(acc.id);
+    al.appendChild(chip);
+  });
+
+  // categories grid
+  const cg = document.getElementById('cats-grid');
+  cg.innerHTML = '';
+  CATEGORIES.forEach(cat => {
+    const div = document.createElement('div');
+    div.className = 'cat-item';
+    div.innerHTML = '<div class="cat-icon" style="background:' + cat.color + '">' + cat.icon + '</div><div class="cat-name">' + cat.name + '</div>';
+    div.onclick = () => { openAddTx(); setTimeout(()=>{ selectCategory(cat.name); },300); };
+    cg.appendChild(div);
+  });
+  // add new category button
+  const addCatDiv = document.createElement('div');
+  addCatDiv.className = 'cat-item';
+  addCatDiv.innerHTML = '<div class="cat-icon" style="background:#f0ede6;border:2px dashed #c8c4bc;font-size:20px">+</div><div class="cat-name" style="color:var(--text2)">Nueva</div>';
+  addCatDiv.onclick = () => openAddCategory();
+  cg.appendChild(addCatDiv);
+
+  // recent transactions
+  const rl = document.getElementById('recent-list');
+  rl.innerHTML = '';
+  const recent = [...txs].sort((a,b) => b.date - a.date).slice(0,8);
+  if (!recent.length) {
+    rl.innerHTML = '<div class="empty-state"><div class="emoji">💸</div><p>Sin movimientos aún.<br>Toca + para registrar uno.</p></div>';
+  } else {
+    recent.forEach(tx => rl.appendChild(txItem(tx)));
+  }
+
+  await renderChart('week');
+}
+
+function txItem(tx) {
+  const cat = CATEGORIES.find(c => c.name === tx.category) || { icon: '📦', color: '#F5F5F5' };
+  const div = document.createElement('div');
+  div.className = 'tx-item';
+  const d = new Date(tx.date);
+  const dateStr = d.toLocaleDateString('es-CO', {day:'numeric', month:'short'});
+  div.innerHTML = `
+    <div class="tx-icon" style="background:${cat.color}">${cat.icon}</div>
+    <div class="tx-info">
+      <div class="tx-name">${tx.desc || tx.category}</div>
+      <div class="tx-meta">${tx.category} · ${dateStr}</div>
+    </div>
+    <div class="tx-amount ${tx.type==='Ingreso'?'inc':'exp'}">${tx.type==='Ingreso'?'+':'-'}${fmt(tx.amount)}</div>`;
+  return div;
+}
+
+// ── CHART ──
+async function renderChart(period) {
+  const data = await getCachedData();
+  const txs = data.transactions || [];
+  const ctx = document.getElementById('mainChart').getContext('2d');
+
+  const now = new Date();
+  let labels = [], incData = [], expData = [];
+
+  if (period === 'week') {
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now); d.setDate(d.getDate() - i);
+      const key = d.toLocaleDateString('es-CO', {weekday:'short'});
+      labels.push(key.charAt(0).toUpperCase() + key.slice(1));
+      const dayTxs = txs.filter(t => { const td = new Date(t.date); return td.toDateString()===d.toDateString(); });
+      incData.push(dayTxs.filter(t=>t.type==='Ingreso').reduce((s,t)=>s+t.amount,0));
+      expData.push(dayTxs.filter(t=>t.type==='Gasto').reduce((s,t)=>s+t.amount,0));
+    }
+  } else {
+    const weeks = ['S1','S2','S3','S4'];
+    labels = weeks;
+    weeks.forEach((_,wi) => {
+      const start = wi*7+1, end = (wi+1)*7;
+      const wTxs = txs.filter(t => { const d = new Date(t.date); return d.getMonth()===now.getMonth() && d.getDate()>=start && d.getDate()<=end; });
+      incData.push(wTxs.filter(t=>t.type==='Ingreso').reduce((s,t)=>s+t.amount,0));
+      expData.push(wTxs.filter(t=>t.type==='Gasto').reduce((s,t)=>s+t.amount,0));
+    });
+  }
+
+  if (chartInstance) chartInstance.destroy();
+  chartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Ingresos', data: incData, backgroundColor: '#2d7a4f22', borderColor: '#2d7a4f', borderWidth: 2, borderRadius: 8 },
+        { label: 'Gastos', data: expData, backgroundColor: '#c0392b18', borderColor: '#c0392b', borderWidth: 2, borderRadius: 8 },
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { family: 'DM Sans', size: 11 }, color: '#7a7670' } },
+        y: { grid: { color: '#f0ede6' }, ticks: { font: { family: 'DM Sans', size: 10 }, color: '#7a7670', callback: v => v===0?'0':v>=1000000?'$'+(v/1000000).toFixed(1)+'M':v>=1000?'$'+(v/1000).toFixed(0)+'k':'$'+v } }
+      }
+    }
+  });
+}
+
+async function setChartPeriod(period, el) {
+  document.querySelectorAll('.chart-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  await renderChart(period);
+}
+
+// ── HISTORY ──
+async function renderHistory() {
+  const data = await getCachedData();
+  const txs = [...(data.transactions||[])].sort((a,b) => b.date - a.date);
+  const hl = document.getElementById('history-list');
+  hl.innerHTML = '';
+  const filtered = historyFilter === 'all' ? txs : txs.filter(t => t.type === historyFilter);
+  if (!filtered.length) {
+    hl.innerHTML = '<div class="empty-state"><div class="emoji">📋</div><p>Sin movimientos aquí.</p></div>';
+    return;
+  }
+  filtered.forEach(tx => hl.appendChild(txItem(tx)));
+}
+
+async function filterHistory(f, el) {
+  historyFilter = f;
+  document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  await renderHistory();
+}
+
+// ── STATS ──
+async function renderStats() {
+  const data = await getCachedData();
+  const txs = data.transactions || [];
+  const now = new Date();
+  const monthTxs = txs.filter(t => { const d = new Date(t.date); return d.getMonth()===now.getMonth() && d.getFullYear()===now.getFullYear(); });
+  const mInc = monthTxs.filter(t=>t.type==='Ingreso').reduce((s,t)=>s+t.amount,0);
+  const mExp = monthTxs.filter(t=>t.type==='Gasto').reduce((s,t)=>s+t.amount,0);
+  const mBal = mInc - mExp;
+
+  document.getElementById('stat-month-inc').textContent = fmt(mInc);
+  document.getElementById('stat-month-exp').textContent = fmt(mExp);
+  document.getElementById('stat-month-bal').textContent = fmt(mBal);
+  document.getElementById('stat-month-sub').textContent = mBal >= 0 ? '✅ Mes positivo' : '⚠️ Mes negativo';
+  document.getElementById('stat-month-bal').style.color = mBal >= 0 ? 'var(--green)' : 'var(--red)';
+
+  // ── DONA POR CUENTA ──
+  const data3 = data;
+  const container = document.getElementById('donuts-container');
+  container.innerHTML = '';
+
+  // destroy old chart instances
+  if (window._donutInstances) window._donutInstances.forEach(c => c.destroy());
+  window._donutInstances = [];
+
+  if (!data3.accounts.length) {
+    container.innerHTML = '<span style="font-size:13px;color:var(--text2)">Sin cuentas registradas</span>';
+    return;
+  }
+
+  data3.accounts.forEach((acc, idx) => {
+    const accTxs = monthTxs.filter(t => t.type==='Gasto' && t.accountId === acc.id);
+    const byCat = {};
+    accTxs.forEach(t => { byCat[t.category] = (byCat[t.category]||0) + t.amount; });
+    const labels = Object.keys(byCat);
+    const vals = labels.map(k => byCat[k]);
+    const colors2 = labels.map((_,i) => CAT_COLORS[i % CAT_COLORS.length]);
+    const total = vals.reduce((s,v)=>s+v,0);
+
+    // Build section
+    const section = document.createElement('div');
+    section.style.cssText = idx > 0 ? 'margin-top:24px;padding-top:20px;border-top:1px solid var(--border)' : '';
+
+    const canvasId = 'donutChart_' + acc.id;
+    section.innerHTML =
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">' +
+        '<span style="font-size:20px">' + acc.icon + '</span>' +
+        '<span style="font-family:Syne,sans-serif;font-weight:700;font-size:14px">' + acc.name + '</span>' +
+        '<span style="margin-left:auto;font-family:Syne,sans-serif;font-weight:700;font-size:14px;color:var(--red)">' + fmt(total) + '</span>' +
+      '</div>' +
+      (labels.length === 0
+        ? '<span style="font-size:12px;color:var(--text2)">Sin gastos este mes en esta cuenta</span>'
+        : '<div class="donut-wrap"><canvas id="' + canvasId + '" width="110" height="110" style="flex-shrink:0"></canvas><div id="legend_' + acc.id + '" class="donut-legend"></div></div>'
+      );
+    container.appendChild(section);
+
+    if (labels.length > 0) {
+      const dctx = document.getElementById(canvasId).getContext('2d');
+      const chart = new Chart(dctx, {
+        type: 'doughnut',
+        data: { labels, datasets: [{ data: vals, backgroundColor: colors2, borderWidth: 0, hoverOffset: 4 }] },
+        options: { cutout: '65%', plugins: { legend: { display: false } }, responsive: false }
+      });
+      window._donutInstances.push(chart);
+      document.getElementById('legend_' + acc.id).innerHTML =
+        labels.map((n,i) =>
+          '<div class="legend-item"><div class="legend-dot" style="background:' + colors2[i] + '"></div>' +
+          '<span>' + n + '</span>' +
+          '<span style="margin-left:auto;font-weight:600">' + fmt(vals[i]) + '</span></div>'
+        ).join('');
+    }
+  });
+
+  // stat title
+  container.insertAdjacentHTML('afterbegin', '<div class="stat-card-label" style="margin-bottom:16px">Gastos por cuenta y categoría</div>');
+}
+
+async function openAddTx() {
+  currentType = 'Gasto';
+  selectedCat = null;
+  selectedAcc = null;
+  document.getElementById('type-gasto').className = 'type-btn active-exp';
+  document.getElementById('type-ingreso').className = 'type-btn';
+  document.getElementById('tx-amount-display').value = '';
+  document.getElementById('tx-amount').value = '';
+  document.getElementById('tx-desc').value = '';
+  document.getElementById('modal-tx').classList.add('open');
+  renderModalCats();
+  await renderModalAccounts();
+}
+
+function closeTxModal() {
+  document.getElementById('modal-tx').classList.remove('open');
+}
+
+function closeModalTx(e) {
+  if (e.target === document.getElementById('modal-tx')) closeTxModal();
+}
+
+function renderModalCats() {
+  const wrap = document.getElementById('modal-cats');
+  wrap.innerHTML = '';
+  CATEGORIES.forEach(cat => {
+    const div = document.createElement('div');
+    div.className = 'cat-pill' + (selectedCat === cat.name ? ' selected' : '');
+    div.id = 'catpill-' + cat.name;
+    div.innerHTML = `<div class="cat-pill-icon" style="background:${cat.color}">${cat.icon}</div><div class="cat-pill-name">${cat.name}</div>`;
+    div.onclick = () => selectCategory(cat.name);
+    wrap.appendChild(div);
+  });
+}
+
+function selectCategory(name) {
+  selectedCat = name;
+  document.querySelectorAll('.cat-pill').forEach(p => {
+    p.classList.toggle('selected', p.id === 'catpill-' + name);
+  });
+}
+
+function setType(type) {
+  currentType = type;
+  document.getElementById('type-gasto').className = 'type-btn' + (type === 'Gasto' ? ' active-exp' : '');
+  document.getElementById('type-ingreso').className = 'type-btn' + (type === 'Ingreso' ? ' active-inc' : '');
+}
+
+async function renderModalAccounts() {
+  const data = await getCachedData();
+  const wrap = document.getElementById('modal-accounts');
+  wrap.innerHTML = '';
+
+  if (!data.accounts || !data.accounts.length) {
+    wrap.innerHTML = '<div style="font-size:13px;color:var(--text2);padding:8px 0">No tienes cuentas — agrega una primero.</div>';
+    return;
+  }
+
+  // Si no hay cuenta seleccionada, pre-seleccionar la primera
+  if (!selectedAcc) selectedAcc = data.accounts[0].id;
+
+  data.accounts.forEach(acc => {
+    const p = document.createElement('div');
+    p.className = 'acc-pill' + (selectedAcc === acc.id ? ' selected' : '');
+    p.id = 'accpill-' + acc.id;
+    p.textContent = acc.icon + ' ' + acc.name;
+    p.onclick = () => {
+      selectedAcc = acc.id;
+      document.querySelectorAll('.acc-pill').forEach(x => x.classList.remove('selected'));
+      p.classList.add('selected');
+    };
+    wrap.appendChild(p);
+  });
+}
+
+async function saveTx() {
+  const amount = parseFloat(document.getElementById('tx-amount').value) || parseFloat(document.getElementById('tx-amount-display').value.replace(/\./g,'').replace(',','.'));
+  const desc = document.getElementById('tx-desc').value.trim();
+  if (!amount || amount <= 0) { showToast('Ingresa un monto válido'); return; }
+  if (!selectedCat) { showToast('Selecciona una categoría'); return; }
+  if (!selectedAcc) { showToast('Selecciona una cuenta'); return; }
+
+  const data = await getCachedData();
+  const tx = {
+    id: Date.now().toString(),
+    type: currentType,
+    amount,
+    desc: desc || selectedCat,
+    category: selectedCat,
+    accountId: selectedAcc,
+    date: Date.now()
+  };
+  data.transactions.push(tx);
+  await saveCachedData(data);
+
+  document.getElementById('modal-tx').classList.remove('open');
+  document.getElementById('tx-amount').value = '';
+  document.getElementById('tx-amount-display').value = '';
+  document.getElementById('tx-desc').value = '';
+  selectedCat = null;
+  await renderDashboard();
+  showToast(currentType === 'Ingreso' ? '✅ Ingreso registrado' : '✅ Gasto registrado');
+}
+
+// ── ADD ACCOUNT ──
+function openAddAccount() {
+  document.getElementById('modal-account').classList.add('open');
+}
+function closeModalAcc(e) {
+  if (e.target === document.getElementById('modal-account')) document.getElementById('modal-account').classList.remove('open');
+}
+function selectAccIcon(el, icon) {
+  selectedAccIcon = icon;
+  document.querySelectorAll('.acc-icon-opt').forEach(o => o.style.borderColor = 'transparent');
+  el.style.borderColor = 'var(--accent)';
+}
+async function saveAccount() {
+  const name = document.getElementById('acc-name').value.trim();
+  const balance = parseFloat(document.getElementById('acc-balance').value) || 0;
+  if (!name) { showToast('Ingresa un nombre'); return; }
+  const data = await getCachedData();
+  data.accounts.push({ id: 'acc' + Date.now(), name, icon: selectedAccIcon, balance });
+  await saveCachedData(data);
+  document.getElementById('modal-account').classList.remove('open');
+  document.getElementById('acc-name').value = '';
+  document.getElementById('acc-balance').value = '';
+  await renderDashboard();
+  showToast('✅ Cuenta agregada');
+}
+
+
+// ── EDIT ACCOUNT ──
+let editingAccId = null;
+let selectedEditAccIcon = '🏦';
+
+async function openEditAccount(accId) {
+  const data = await getCachedData();
+  const acc = data.accounts.find(a => a.id === accId);
+  if (!acc) return;
+  editingAccId = accId;
+  selectedEditAccIcon = acc.icon;
+  document.getElementById('edit-acc-name').value = acc.name;
+  document.getElementById('edit-acc-balance').value = acc.balance;
+  // highlight current icon
+  document.querySelectorAll('.edit-icon-opt').forEach(o => {
+    o.style.borderColor = o.textContent.trim() === acc.icon ? 'var(--accent)' : 'transparent';
+  });
+  document.getElementById('modal-edit-account').classList.add('open');
+}
+function closeModalEditAcc(e) {
+  if (e.target === document.getElementById('modal-edit-account')) document.getElementById('modal-edit-account').classList.remove('open');
+}
+function selectEditAccIcon(el, icon) {
+  selectedEditAccIcon = icon;
+  document.querySelectorAll('.edit-icon-opt').forEach(o => o.style.borderColor = 'transparent');
+  el.style.borderColor = 'var(--accent)';
+}
+async function updateAccount() {
+  const name = document.getElementById('edit-acc-name').value.trim();
+  const balance = parseFloat(document.getElementById('edit-acc-balance').value) || 0;
+  if (!name) { showToast('Ingresa un nombre'); return; }
+  const data = await getCachedData();
+  const idx = data.accounts.findIndex(a => a.id === editingAccId);
+  if (idx === -1) return;
+  data.accounts[idx].name = name;
+  data.accounts[idx].balance = balance;
+  data.accounts[idx].icon = selectedEditAccIcon;
+  await saveCachedData(data);
+  document.getElementById('modal-edit-account').classList.remove('open');
+  await renderDashboard();
+  showToast('✅ Cuenta actualizada');
+}
+async function deleteAccount() {
+  if (!confirm('¿Eliminar esta cuenta? Las transacciones vinculadas no se borrarán.')) return;
+  const data = await getCachedData();
+  data.accounts = data.accounts.filter(a => a.id !== editingAccId);
+  await saveCachedData(data);
+  document.getElementById('modal-edit-account').classList.remove('open');
+  await renderDashboard();
+  showToast('Cuenta eliminada');
+}
+
+
+// ── CUSTOM CATEGORIES ──
+const CAT_COLORS_LIST = ['#FFF3E0','#E3F2FD','#FCE4EC','#F3E5F5','#FFFDE7','#E8F5E9','#E0F7FA','#FFF8E1','#EDE7F6','#FDE8E8','#E8F4FD','#F0FFF0'];
+const CAT_EMOJIS = ['🎯','🏋️','✈️','🎨','🐶','🍕','☕','🎵','💼','🌿','⚽','🧴','🎁','💻','🔧','🏥','📷','🧠','🛍️','🌙'];
+let selectedNewCatColor = '#FFF3E0';
+let selectedNewCatEmoji = '🎯';
+
+function openAddCategory() {
+  selectedNewCatColor = '#FFF3E0';
+  selectedNewCatEmoji = '🎯';
+  document.getElementById('new-cat-name').value = '';
+  // reset selections
+  document.querySelectorAll('.new-cat-color').forEach((el,i) => el.style.outline = i===0 ? '2px solid var(--accent)' : 'none');
+  document.querySelectorAll('.new-cat-emoji').forEach((el,i) => el.style.background = i===0 ? 'var(--surface2)' : 'transparent');
+  document.getElementById('new-cat-preview').textContent = selectedNewCatEmoji;
+  document.getElementById('new-cat-preview').style.background = selectedNewCatColor;
+  document.getElementById('modal-add-cat').classList.add('open');
+}
+function closeModalCat(e) {
+  if (e.target === document.getElementById('modal-add-cat')) document.getElementById('modal-add-cat').classList.remove('open');
+}
+function pickCatColor(el, color) {
+  selectedNewCatColor = color;
+  document.querySelectorAll('.new-cat-color').forEach(x => x.style.outline = 'none');
+  el.style.outline = '2px solid var(--accent)';
+  document.getElementById('new-cat-preview').style.background = color;
+}
+function pickCatEmoji(el, emoji) {
+  selectedNewCatEmoji = emoji;
+  document.querySelectorAll('.new-cat-emoji').forEach(x => x.style.background = 'transparent');
+  el.style.background = 'var(--surface2)';
+  document.getElementById('new-cat-preview').textContent = emoji;
+}
+async function saveNewCategory() {
+  const name = document.getElementById('new-cat-name').value.trim();
+  if (!name) { showToast('Escribe un nombre'); return; }
+  if (CATEGORIES.find(c => c.name.toLowerCase() === name.toLowerCase())) { showToast('Ya existe esa categoría'); return; }
+  const cat = { name, icon: selectedNewCatEmoji, color: selectedNewCatColor };
+  await saveCustomCategory(cat);
+  document.getElementById('modal-add-cat').classList.remove('open');
+  await renderDashboard();
+  showToast('✅ Categoría creada');
+}
+
+
+// ── AMOUNT FORMATTING ──
+function formatAmountInput(el) {
+  // Remove all non-digit chars
+  let raw = el.value.replace(/[^0-9]/g, '');
+  if (!raw) { el.value = ''; document.getElementById('tx-amount').value = ''; return; }
+  // Store raw number
+  document.getElementById('tx-amount').value = raw;
+  // Format with thousand separators (COP style: dots)
+  el.value = parseInt(raw, 10).toLocaleString('es-CO');
+}
+
+// ── UTILS ──
+function fmt(n) {
+  return '$' + Math.round(n).toLocaleString('es-CO');
+}
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ── INIT ──
+// La sesión es manejada por onAuthStateChanged en el módulo Firebase (arriba en <head>)
+// No se necesita lógica de init aquí — Firebase llama a launchApp() automáticamente si hay sesión activa.
+window.addEventListener('load', () => {
+  // Mostrar pantalla de auth por defecto hasta que Firebase confirme la sesión
+  // onAuthStateChanged se encarga del resto
+});
+</script>
+<!-- EDIT ACCOUNT MODAL -->
+<div class="modal-overlay" id="modal-edit-account" onclick="closeModalEditAcc(event)">
+  <div class="modal2">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Editar cuenta</div>
+    <div class="form-row">
+      <div class="form-label">Nombre</div>
+      <input class="form-input" id="edit-acc-name" placeholder="Nombre de la cuenta">
+    </div>
+    <div class="form-row">
+      <div class="form-label">Saldo inicial (COP)</div>
+      <input class="form-input" id="edit-acc-balance" type="number" placeholder="0" inputmode="decimal">
+    </div>
+    <div class="form-row">
+      <div class="form-label">Icono</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px">
+        <span class="edit-icon-opt" onclick="selectEditAccIcon(this,'&#127974;')" style="font-size:26px;cursor:pointer;padding:6px;border-radius:8px;border:2px solid var(--border)">&#127974;</span>
+        <span class="edit-icon-opt" onclick="selectEditAccIcon(this,'&#128181;')" style="font-size:26px;cursor:pointer;padding:6px;border-radius:8px;border:2px solid transparent">&#128181;</span>
+        <span class="edit-icon-opt" onclick="selectEditAccIcon(this,'&#128179;')" style="font-size:26px;cursor:pointer;padding:6px;border-radius:8px;border:2px solid transparent">&#128179;</span>
+        <span class="edit-icon-opt" onclick="selectEditAccIcon(this,'&#128241;')" style="font-size:26px;cursor:pointer;padding:6px;border-radius:8px;border:2px solid transparent">&#128241;</span>
+        <span class="edit-icon-opt" onclick="selectEditAccIcon(this,'&#128055;')" style="font-size:26px;cursor:pointer;padding:6px;border-radius:8px;border:2px solid transparent">&#128055;</span>
+      </div>
+    </div>
+    <button class="btn-primary" style="margin-top:16px" onclick="updateAccount()">Guardar cambios &rarr;</button>
+    <button onclick="deleteAccount()" style="margin-top:10px;width:100%;background:none;border:none;color:var(--red);font-size:14px;font-weight:500;cursor:pointer;padding:8px;">&#128465; Eliminar cuenta</button>
+  </div>
+</div>
+
+<!-- ADD CATEGORY MODAL -->
+<div class="modal-overlay" id="modal-add-cat" onclick="closeModalCat(event)">
+  <div class="modal2">
+    <div class="modal-handle"></div>
+    <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px">
+      <div id="new-cat-preview" style="width:56px;height:56px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:26px;background:#FFF3E0;flex-shrink:0;transition:all .2s">🎯</div>
+      <div class="modal-title" style="margin:0">Nueva categoría</div>
+    </div>
+    <div class="form-row">
+      <div class="form-label">Nombre</div>
+      <input class="form-input" id="new-cat-name" placeholder="Ej: Mascota, Gym, Viajes...">
+    </div>
+    <div class="form-label" style="margin-bottom:10px">Color</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px">
+      <div class="new-cat-color" onclick="pickCatColor(this,'#FFF3E0')" style="width:30px;height:30px;border-radius:8px;background:#FFF3E0;cursor:pointer;outline:2px solid var(--accent)"></div>
+      <div class="new-cat-color" onclick="pickCatColor(this,'#E3F2FD')" style="width:30px;height:30px;border-radius:8px;background:#E3F2FD;cursor:pointer"></div>
+      <div class="new-cat-color" onclick="pickCatColor(this,'#FCE4EC')" style="width:30px;height:30px;border-radius:8px;background:#FCE4EC;cursor:pointer"></div>
+      <div class="new-cat-color" onclick="pickCatColor(this,'#F3E5F5')" style="width:30px;height:30px;border-radius:8px;background:#F3E5F5;cursor:pointer"></div>
+      <div class="new-cat-color" onclick="pickCatColor(this,'#E8F5E9')" style="width:30px;height:30px;border-radius:8px;background:#E8F5E9;cursor:pointer"></div>
+      <div class="new-cat-color" onclick="pickCatColor(this,'#E0F7FA')" style="width:30px;height:30px;border-radius:8px;background:#E0F7FA;cursor:pointer"></div>
+      <div class="new-cat-color" onclick="pickCatColor(this,'#FFFDE7')" style="width:30px;height:30px;border-radius:8px;background:#FFFDE7;cursor:pointer"></div>
+      <div class="new-cat-color" onclick="pickCatColor(this,'#EDE7F6')" style="width:30px;height:30px;border-radius:8px;background:#EDE7F6;cursor:pointer"></div>
+      <div class="new-cat-color" onclick="pickCatColor(this,'#FDE8E8')" style="width:30px;height:30px;border-radius:8px;background:#FDE8E8;cursor:pointer"></div>
+      <div class="new-cat-color" onclick="pickCatColor(this,'#F0FFF0')" style="width:30px;height:30px;border-radius:8px;background:#F0FFF0;cursor:pointer"></div>
+    </div>
+    <div class="form-label" style="margin-bottom:10px">Ícono</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px">
+      <span class="new-cat-emoji" onclick="pickCatEmoji(this,'🎯')" style="font-size:22px;cursor:pointer;padding:6px;border-radius:8px;background:var(--surface2)">🎯</span>
+      <span class="new-cat-emoji" onclick="pickCatEmoji(this,'🏋️')" style="font-size:22px;cursor:pointer;padding:6px;border-radius:8px">🏋️</span>
+      <span class="new-cat-emoji" onclick="pickCatEmoji(this,'✈️')" style="font-size:22px;cursor:pointer;padding:6px;border-radius:8px">✈️</span>
+      <span class="new-cat-emoji" onclick="pickCatEmoji(this,'🎨')" style="font-size:22px;cursor:pointer;padding:6px;border-radius:8px">🎨</span>
+      <span class="new-cat-emoji" onclick="pickCatEmoji(this,'🐶')" style="font-size:22px;cursor:pointer;padding:6px;border-radius:8px">🐶</span>
+      <span class="new-cat-emoji" onclick="pickCatEmoji(this,'🍕')" style="font-size:22px;cursor:pointer;padding:6px;border-radius:8px">🍕</span>
+      <span class="new-cat-emoji" onclick="pickCatEmoji(this,'☕')" style="font-size:22px;cursor:pointer;padding:6px;border-radius:8px">☕</span>
+      <span class="new-cat-emoji" onclick="pickCatEmoji(this,'🎵')" style="font-size:22px;cursor:pointer;padding:6px;border-radius:8px">🎵</span>
+      <span class="new-cat-emoji" onclick="pickCatEmoji(this,'💼')" style="font-size:22px;cursor:pointer;padding:6px;border-radius:8px">💼</span>
+      <span class="new-cat-emoji" onclick="pickCatEmoji(this,'🌿')" style="font-size:22px;cursor:pointer;padding:6px;border-radius:8px">🌿</span>
+      <span class="new-cat-emoji" onclick="pickCatEmoji(this,'⚽')" style="font-size:22px;cursor:pointer;padding:6px;border-radius:8px">⚽</span>
+      <span class="new-cat-emoji" onclick="pickCatEmoji(this,'🧴')" style="font-size:22px;cursor:pointer;padding:6px;border-radius:8px">🧴</span>
+      <span class="new-cat-emoji" onclick="pickCatEmoji(this,'🎁')" style="font-size:22px;cursor:pointer;padding:6px;border-radius:8px">🎁</span>
+      <span class="new-cat-emoji" onclick="pickCatEmoji(this,'💻')" style="font-size:22px;cursor:pointer;padding:6px;border-radius:8px">💻</span>
+      <span class="new-cat-emoji" onclick="pickCatEmoji(this,'🔧')" style="font-size:22px;cursor:pointer;padding:6px;border-radius:8px">🔧</span>
+      <span class="new-cat-emoji" onclick="pickCatEmoji(this,'🏥')" style="font-size:22px;cursor:pointer;padding:6px;border-radius:8px">🏥</span>
+      <span class="new-cat-emoji" onclick="pickCatEmoji(this,'📷')" style="font-size:22px;cursor:pointer;padding:6px;border-radius:8px">📷</span>
+      <span class="new-cat-emoji" onclick="pickCatEmoji(this,'🛍️')" style="font-size:22px;cursor:pointer;padding:6px;border-radius:8px">🛍️</span>
+      <span class="new-cat-emoji" onclick="pickCatEmoji(this,'🌙')" style="font-size:22px;cursor:pointer;padding:6px;border-radius:8px">🌙</span>
+      <span class="new-cat-emoji" onclick="pickCatEmoji(this,'🚀')" style="font-size:22px;cursor:pointer;padding:6px;border-radius:8px">🚀</span>
+    </div>
+    <button class="btn-primary" onclick="saveNewCategory()">Crear categoría →</button>
+  </div>
+</div>
+
+</body>
+</html>
